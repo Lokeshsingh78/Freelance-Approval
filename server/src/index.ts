@@ -30,6 +30,15 @@ app.use(express.urlencoded({ extended: true }));
 // Serve local upload artifacts if using local fallback
 app.use("/uploads", express.static(getLocalUploadsPath()));
 
+// Root endpoint
+app.get("/", (_req, res) => {
+  res.json({
+    status: "ok",
+    message: "Freelance Approval Backend API Server Running",
+    healthCheck: "/api/health",
+  });
+});
+
 // Health check endpoint
 app.get("/api/health", (_req, res) => {
   res.json({
