@@ -60,9 +60,11 @@ export const Dashboard = () => {
 
   const handleCopyLink = () => {
     if (!project) return;
-    // Fallback if publicToken isn't in the response yet
     const linkToken = project.publicToken || token;
-    const url = `${window.location.origin}/view/${linkToken}`;
+    const baseOrigin = window.location.hostname.includes("vercel.app")
+      ? "https://freelance-approval.vercel.app"
+      : window.location.origin;
+    const url = `${baseOrigin}/view/${linkToken}`;
 
     navigator.clipboard.writeText(url);
     setCopyText("Copied!");

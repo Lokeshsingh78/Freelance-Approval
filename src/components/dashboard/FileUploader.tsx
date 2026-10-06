@@ -191,7 +191,10 @@ export const FileUploader = ({ token }: FileUploaderProps) => {
       setPaymentPhase("creating_order");
       setIsModalOpen(true);
 
-      const returnUrl = `${window.location.origin}/dashboard/${token}?order_id={order_id}`;
+      const baseOrigin = window.location.hostname.includes("vercel.app")
+        ? "https://freelance-approval.vercel.app"
+        : window.location.origin;
+      const returnUrl = `${baseOrigin}/dashboard/${token}?order_id={order_id}`;
 
       // 1. Create order on backend & Cashfree
       const { data: orderData } = await api.post(
