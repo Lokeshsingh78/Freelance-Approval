@@ -26,7 +26,10 @@ export const saveUploadedFile = async (
   const saveToLocalDisk = () => {
     const filePath = path.join(LOCAL_UPLOADS_DIR, key);
     fs.writeFileSync(filePath, buffer);
-    const serverUrl = process.env.SERVER_URL || "http://localhost:8080";
+    const serverUrl =
+      process.env.SERVER_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      (process.env.NODE_ENV === "production" ? "https://freelance-approval.onrender.com" : "http://localhost:8080");
     return `${serverUrl}/uploads/${key}`;
   };
 
@@ -72,7 +75,10 @@ export const getFileDownloadUrl = async (
   filename: string,
   isDownload: boolean = true
 ): Promise<string> => {
-  const serverUrl = process.env.SERVER_URL || "http://localhost:8080";
+  const serverUrl =
+    process.env.SERVER_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    (process.env.NODE_ENV === "production" ? "https://freelance-approval.onrender.com" : "http://localhost:8080");
   const rawEndpoint = `${serverUrl}/api/storage/raw/${encodeURIComponent(key)}?download=${isDownload}&filename=${encodeURIComponent(filename)}`;
 
   // If file exists on local disk storage

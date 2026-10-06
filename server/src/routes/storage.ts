@@ -85,7 +85,10 @@ storageRouter.post("/sign-url", async (req: Request, res: Response): Promise<voi
 
     const safeName = path.basename(filename).replace(/[^a-zA-Z0-9.\-_]/g, "_");
     const key = `${Date.now()}_${crypto.randomBytes(4).toString("hex")}_${safeName}`;
-    const serverUrl = process.env.SERVER_URL || "http://localhost:8080";
+    const serverUrl =
+      process.env.SERVER_URL ||
+      process.env.RENDER_EXTERNAL_URL ||
+      (process.env.NODE_ENV === "production" ? "https://freelance-approval.onrender.com" : "http://localhost:8080");
     const uploadUrl = `${serverUrl}/api/storage/upload/${encodeURIComponent(key)}`;
 
     const responsePayload = {

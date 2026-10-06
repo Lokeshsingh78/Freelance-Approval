@@ -1,6 +1,8 @@
 import axios from "axios";
 
-const base = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const base =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? "http://localhost:8080" : "https://freelance-approval.onrender.com");
 const baseURL = `${base.replace(/\/$/, "")}/api`;
 
 // Create the Axios instance
