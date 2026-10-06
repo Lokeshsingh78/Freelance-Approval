@@ -23,6 +23,7 @@ import {
   Download,
   AlertCircle,
   RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 import { getFileIcon } from "@/lib/ConditionalIcons/getFileIcon";
 import { getFileCategory, formatFileSize, getCategoryBadge } from "@/lib/fileHelpers";
@@ -108,8 +109,24 @@ export const Dashboard = () => {
 
   if (error || !project)
     return (
-      <div className="h-screen flex items-center justify-center bg-black text-red-400">
-        Error loading project. Please refresh.
+      <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-black p-6 text-center">
+        <div className="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8 shadow-xl space-y-4 animate-in fade-in">
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 mx-auto flex items-center justify-center">
+            <CheckCircle2 size={28} />
+          </div>
+          <h2 className="text-xl font-bold text-zinc-900 dark:text-white">
+            Project Completed or Removed
+          </h2>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            This project link is no longer active, has expired, or has reached final completion.
+          </p>
+          <button
+            onClick={() => navigate("/")}
+            className="w-full py-3 px-4 rounded-xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 font-semibold text-sm hover:opacity-90 transition cursor-pointer shadow-sm"
+          >
+            Create New Project
+          </button>
+        </div>
       </div>
     );
 

@@ -68,11 +68,35 @@ const loadLocalDb = () => {
   }
 };
 
+let saveTimeout: NodeJS.Timeout | null = null;
 const saveLocalDb = () => {
-  try {
-    fs.writeFileSync(LOCAL_DB_FILE, JSON.stringify(localState, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Error writing local DB:", err);
+  if (saveTimeout) clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(() => {
+    fs.promises.writeFile(LOCAL_DB_FILE, JSON.stringify(localState, null, 2), "utf-8")
+      .catch((err) => console.error("Error writing local DB:", err));
+  }, 100);
+};
+
+// In-Memory Fast Cache with TTL for ultra-fast response times
+interface CacheEntry {
+  data: ProjectRecord;
+  cachedAt: number;
+}
+const projectCacheByAdmin = new Map<string, CacheEntry>();
+const projectCacheByPublic = new Map<string, CacheEntry>();
+const CACHE_TTL_MS = 15000; // 15 seconds TTL
+
+export const invalidateProjectCache = (projectId?: string) => {
+  if (!projectId) {
+    projectCacheByAdmin.clear();
+    projectCacheByPublic.clear();
+    return;
+  }
+  for (const [key, entry] of projectCacheByAdmin.entries()) {
+    if (entry.data.id === projectId) projectCacheByAdmin.delete(key);
+  }
+  for (const [key, entry] of projectCacheByPublic.entries()) {
+    if (entry.data.id === projectId) projectCacheByPublic.delete(key);
   }
 };
 
@@ -147,6 +171,12 @@ export const createProject = async (
 export const getProjectByAdminToken = async (
   adminToken: string
 ): Promise<ProjectRecord | null> => {
+  // 1. Check Fast In-Memory Cache
+  const cached = projectCacheByAdmin.get(adminToken);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   if (isSupabaseConfigured() && supabase) {
     const { data: proj, error } = await supabase
       .from("projects")
@@ -156,27 +186,30 @@ export const getProjectByAdminToken = async (
 
     if (error || !proj) return null;
 
-    // Fetch attached file
-    const { data: files } = await supabase
-      .from("files")
-      .select("*")
-      .eq("project_id", proj.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
+    // Fetch attached file, audit logs, and decisions IN PARALLEL!
+    const [filesRes, logsRes, decisionsRes] = await Promise.all([
+      supabase
+        .from("files")
+        .select("*")
+        .eq("project_id", proj.id)
+        .order("created_at", { ascending: false })
+        .limit(1),
+      supabase
+        .from("audit_logs")
+        .select("*")
+        .eq("project_id", proj.id)
+        .order("created_at", { ascending: true })
+        .limit(50),
+      supabase
+        .from("approval_decisions")
+        .select("*")
+        .eq("project_id", proj.id)
+        .order("created_at", { ascending: false }),
+    ]);
 
-    // Fetch logs
-    const { data: logs } = await supabase
-      .from("audit_logs")
-      .select("*")
-      .eq("project_id", proj.id)
-      .order("created_at", { ascending: true });
-
-    // Fetch decisions
-    const { data: decisions } = await supabase
-      .from("approval_decisions")
-      .select("*")
-      .eq("project_id", proj.id)
-      .order("created_at", { ascending: false });
+    const files = filesRes.data;
+    const logs = logsRes.data;
+    const decisions = decisionsRes.data;
 
     const latestDecision = decisions && decisions.length > 0 ? decisions[0] : null;
 
@@ -196,7 +229,7 @@ export const getProjectByAdminToken = async (
       };
     }
 
-    return {
+    const result: ProjectRecord = {
       id: proj.id,
       name: proj.name,
       adminToken: proj.admin_token,
@@ -229,6 +262,9 @@ export const getProjectByAdminToken = async (
       })),
       latestComment: latestDecision ? latestDecision.comment : null,
     };
+
+    projectCacheByAdmin.set(adminToken, { data: result, cachedAt: Date.now() });
+    return result;
   } else {
     const proj = Object.values(localState.projects).find(
       (p) => p.adminToken === adminToken
@@ -244,13 +280,16 @@ export const getProjectByAdminToken = async (
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const latestDecision = decisions.length > 0 ? decisions[0] : null;
 
-    return {
+    const result: ProjectRecord = {
       ...proj,
       file: file || null,
       logs,
       decisions,
       latestComment: latestDecision ? latestDecision.comment : null,
     };
+
+    projectCacheByAdmin.set(adminToken, { data: result, cachedAt: Date.now() });
+    return result;
   }
 };
 
@@ -259,6 +298,12 @@ export const getProjectByPublicToken = async (
   ipAddress?: string,
   userAgent?: string
 ): Promise<ProjectRecord | null> => {
+  // 1. Check Fast In-Memory Cache
+  const cached = projectCacheByPublic.get(publicToken);
+  if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
   if (isSupabaseConfigured() && supabase) {
     const { data: proj, error } = await supabase
       .from("projects")
@@ -268,30 +313,38 @@ export const getProjectByPublicToken = async (
 
     if (error || !proj) return null;
 
-    // Log client viewed
-    await supabase.from("audit_logs").insert({
-      id: crypto.randomUUID(),
-      project_id: proj.id,
-      action: "CLIENT_VIEWED",
-      actor_role: "CLIENT",
-      ip_address: ipAddress || null,
-      user_agent: userAgent || null,
-      created_at: new Date().toISOString(),
-    });
+    // Asynchronous non-blocking background audit log (fire & forget)
+    if (supabase) {
+      Promise.resolve(
+        supabase.from("audit_logs").insert({
+          id: crypto.randomUUID(),
+          project_id: proj.id,
+          action: "CLIENT_VIEWED",
+          actor_role: "CLIENT",
+          ip_address: ipAddress || null,
+          user_agent: userAgent || null,
+          created_at: new Date().toISOString(),
+        })
+      ).catch((err: any) => console.error("Audit log error:", err));
+    }
 
-    const { data: files } = await supabase
-      .from("files")
-      .select("*")
-      .eq("project_id", proj.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
+    // Parallel fetch of files and decisions!
+    const [filesRes, decisionsRes] = await Promise.all([
+      supabase
+        .from("files")
+        .select("*")
+        .eq("project_id", proj.id)
+        .order("created_at", { ascending: false })
+        .limit(1),
+      supabase
+        .from("approval_decisions")
+        .select("*")
+        .eq("project_id", proj.id)
+        .order("created_at", { ascending: false }),
+    ]);
 
-    // Fetch all decisions for complete remarks & feedback history
-    const { data: decisions } = await supabase
-      .from("approval_decisions")
-      .select("*")
-      .eq("project_id", proj.id)
-      .order("created_at", { ascending: false });
+    const files = filesRes.data;
+    const decisions = decisionsRes.data;
 
     const latestDecision = decisions && decisions.length > 0 ? decisions[0] : null;
 
@@ -311,7 +364,7 @@ export const getProjectByPublicToken = async (
       };
     }
 
-    return {
+    const result: ProjectRecord = {
       id: proj.id,
       name: proj.name,
       adminToken: "",
@@ -335,23 +388,14 @@ export const getProjectByPublicToken = async (
       })),
       latestComment: latestDecision ? latestDecision.comment : null,
     };
+
+    projectCacheByPublic.set(publicToken, { data: result, cachedAt: Date.now() });
+    return result;
   } else {
     const proj = Object.values(localState.projects).find(
       (p) => p.publicToken === publicToken
     );
     if (!proj) return null;
-
-    // Log client viewed
-    localState.logs.push({
-      id: crypto.randomUUID(),
-      projectId: proj.id,
-      action: "CLIENT_VIEWED",
-      actorRole: "CLIENT",
-      ipAddress: ipAddress || null,
-      userAgent: userAgent || null,
-      createdAt: new Date().toISOString(),
-    });
-    saveLocalDb();
 
     const file = Object.values(localState.files).find(
       (f) => f.projectId === proj.id
@@ -362,12 +406,15 @@ export const getProjectByPublicToken = async (
       .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     const latestDecision = decisions.length > 0 ? decisions[0] : null;
 
-    return {
+    const result: ProjectRecord = {
       ...proj,
       file: file || null,
       decisions,
       latestComment: latestDecision ? latestDecision.comment : null,
     };
+
+    projectCacheByPublic.set(publicToken, { data: result, cachedAt: Date.now() });
+    return result;
   }
 };
 
@@ -423,6 +470,7 @@ export const updateProjectStatus = async (
       created_at: now,
     });
 
+    invalidateProjectCache(proj.id);
     return await getProjectByPublicToken(publicToken);
   } else {
     const proj = Object.values(localState.projects).find(
@@ -459,6 +507,7 @@ export const updateProjectStatus = async (
     });
 
     saveLocalDb();
+    invalidateProjectCache(proj.id);
     return getProjectByPublicToken(publicToken);
   }
 };
@@ -485,6 +534,7 @@ export const updateProjectExpiration = async (
       .update({ expires_at: expiresAt, updated_at: now })
       .eq("id", proj.id);
 
+    invalidateProjectCache(proj.id);
     return { expiresAt, projectId: proj.id };
   } else {
     const proj = Object.values(localState.projects).find(
@@ -496,6 +546,7 @@ export const updateProjectExpiration = async (
     proj.updatedAt = now;
     saveLocalDb();
 
+    invalidateProjectCache(proj.id);
     return { expiresAt, projectId: proj.id };
   }
 };
@@ -511,6 +562,7 @@ export const deleteProject = async (adminToken: string): Promise<boolean> => {
     if (!proj) return false;
 
     await supabase.from("projects").delete().eq("id", proj.id);
+    invalidateProjectCache(proj.id);
     return true;
   } else {
     const proj = Object.values(localState.projects).find(
@@ -525,6 +577,7 @@ export const deleteProject = async (adminToken: string): Promise<boolean> => {
       (d) => d.projectId !== proj.id
     );
     saveLocalDb();
+    invalidateProjectCache(proj.id);
     return true;
   }
 };
@@ -596,6 +649,7 @@ export const attachFileToProject = async (
       createdAt: now,
     };
 
+    invalidateProjectCache(proj.id);
     return { file, projectId: proj.id };
   } else {
     const proj = Object.values(localState.projects).find(
@@ -629,6 +683,7 @@ export const attachFileToProject = async (
     });
 
     saveLocalDb();
+    invalidateProjectCache(proj.id);
     return { file, projectId: proj.id };
   }
 };
@@ -674,6 +729,7 @@ export const deleteFile = async (
     if (!f) return { success: false };
 
     await supabase.from("files").delete().eq("id", fileId);
+    invalidateProjectCache(f.project_id || projectId);
     return {
       success: true,
       storageKey: f.storage_key,
@@ -686,6 +742,7 @@ export const deleteFile = async (
     const targetProjectId = projectId || file.projectId;
     delete localState.files[targetProjectId];
     saveLocalDb();
+    invalidateProjectCache(targetProjectId);
 
     return {
       success: true,

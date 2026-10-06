@@ -1,4 +1,4 @@
-import { Clock, AlertTriangle } from "lucide-react";
+import { Clock, CheckCircle } from "lucide-react";
 
 export const TimeRemaining = ({
   expiresAt,
@@ -18,8 +18,8 @@ export const TimeRemaining = ({
 
   if (isExpired) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-red-500 bg-red-500/10 px-2 py-1 rounded">
-        <AlertTriangle size={12} /> Expired
+      <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded">
+        <CheckCircle size={12} /> Project Completed
       </span>
     );
   }

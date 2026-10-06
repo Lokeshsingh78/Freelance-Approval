@@ -18,6 +18,12 @@ interface FeedbackHistoryProps {
   className?: string;
 }
 
+export const getOrdinal = (n: number): string => {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+};
+
 export const FeedbackHistory: React.FC<FeedbackHistoryProps> = ({
   decisions = [],
   className = "",
@@ -93,7 +99,7 @@ export const FeedbackHistory: React.FC<FeedbackHistoryProps> = ({
 
         <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
           <span className="px-2.5 py-1 text-xs font-mono font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-300 rounded-lg border border-zinc-200 dark:border-zinc-700">
-            {totalRounds} {totalRounds === 1 ? "Round" : "Rounds"}
+            {totalRounds === 1 ? "1st Round" : `${getOrdinal(totalRounds)} Round (${totalRounds} Rounds)`}
           </span>
           {rejectionCount > 0 && (
             <span className="px-2.5 py-1 text-xs font-semibold bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400 rounded-lg border border-rose-200 dark:border-rose-900/50">
@@ -165,7 +171,7 @@ export const FeedbackHistory: React.FC<FeedbackHistoryProps> = ({
                         </span>
 
                         <span className="text-xs font-semibold text-zinc-500 dark:text-zinc-400 font-mono">
-                          Round #{roundNumber} {isLatest && "(Latest)"}
+                          {getOrdinal(roundNumber)} Round {isLatest && "(Latest)"}
                         </span>
                       </div>
 

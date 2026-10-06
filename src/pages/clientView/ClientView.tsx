@@ -9,6 +9,7 @@ import { useDownloadFile } from "@/hooks/useProject/storage/useDownloadFile";
 import { DeliverableDisplay } from "@/components/deliverable/DeliverableDisplay";
 import { FeedbackHistory } from "@/components/dashboard/FeedbackHistory";
 import { ThemeToggle } from "@/components/themeToggle/ThemeToggle";
+import { ProjectCompletedView } from "@/components/clientView/ProjectCompletedView";
 
 
 
@@ -55,24 +56,24 @@ export const ClientView = () => {
     }
   };
 
+  const isExpired = project?.expiresAt
+    ? new Date(project.expiresAt).getTime() <= Date.now()
+    : false;
+
   if (isLoading)
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-50 dark:bg-black">
         <Loader2 className="animate-spin text-zinc-900 dark:text-white" />
       </div>
     );
-  if (error || !project)
-    return (
-      <div className="h-screen flex items-center justify-center bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white">
-        Project not found.
-      </div>
-    );
-  if (!project)
-    return (
-      <div className="h-screen flex items-center justify-center bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white">
-        Project not found.
-      </div>
-    );
+
+  if (error || !project) {
+    return <ProjectCompletedView reason="deleted" />;
+  }
+
+  if (isExpired || project.status === "EXPIRED" || (project.status as any) === "COMPLETED") {
+    return <ProjectCompletedView projectName={project.name} reason="expired" />;
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-white pb-28 font-sans transition-colors">
