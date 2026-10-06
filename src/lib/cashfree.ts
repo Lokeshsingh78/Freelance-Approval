@@ -54,7 +54,9 @@ export interface CashfreeCheckoutResult {
 
 export const startCashfreePayment = async (
   paymentSessionId: string,
-  mode: "production" | "sandbox" = "production"
+  mode: "production" | "sandbox" = "production",
+  redirectTarget: "_modal" | "_self" = "_modal",
+  returnUrl?: string
 ): Promise<CashfreeCheckoutResult> => {
   await loadCashfreeSDK();
 
@@ -67,12 +69,17 @@ export const startCashfreePayment = async (
   });
 
   try {
-    const result = await cashfree.checkout({
+    const checkoutOptions: any = {
       paymentSessionId,
-      redirectTarget: "_modal",
-    });
+      redirectTarget,
+    };
+    if (returnUrl) {
+      checkoutOptions.returnUrl = returnUrl;
+    }
 
-    if (result.error) {
+    const result = await cashfree.checkout(checkoutOptions);
+
+    if (result && result.error) {
       return {
         success: false,
         error: result.error.message || "Payment cancelled or failed",
@@ -81,12 +88,12 @@ export const startCashfreePayment = async (
 
     return {
       success: true,
-      paymentDetails: result.paymentDetails,
+      paymentDetails: result?.paymentDetails,
     };
   } catch (err: any) {
     return {
       success: false,
-      error: err.message || "Cashfree checkout encounter an unexpected error",
+      error: err.message || "Cashfree checkout encountered an unexpected error",
     };
   }
 };

@@ -191,12 +191,15 @@ export const FileUploader = ({ token }: FileUploaderProps) => {
       setPaymentPhase("creating_order");
       setIsModalOpen(true);
 
+      const returnUrl = `${window.location.origin}/dashboard/${token}?order_id={order_id}`;
+
       // 1. Create order on backend & Cashfree
       const { data: orderData } = await api.post(
         "/payments/create-order",
         {
           filename: file.name,
           fileSize: file.size,
+          returnUrl,
         },
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -213,7 +216,9 @@ export const FileUploader = ({ token }: FileUploaderProps) => {
       // 2. Launch Cashfree JS Checkout
       const checkoutResult = await startCashfreePayment(
         orderData.paymentSessionId,
-        "production"
+        "production",
+        "_modal",
+        returnUrl
       );
 
       if (!checkoutResult.success) {
@@ -490,16 +495,24 @@ export const FileUploader = ({ token }: FileUploaderProps) => {
                 )}
 
                 {paymentPhase === "awaiting_payment" && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     <p className="text-xs text-zinc-300">
-                      Payment modal is open. Please complete the transaction in Cashfree.
+                      Payment checkout is active. If the popup was blocked by browser or extensions, open in full window below:
                     </p>
-                    <button
-                      onClick={() => paymentSessionId && startCashfreePayment(paymentSessionId, "production")}
-                      className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold cursor-pointer transition flex items-center gap-1.5 mx-auto"
-                    >
-                      <ExternalLink size={13} /> Re-open Cashfree Checkout
-                    </button>
+                    <div className="flex flex-col sm:flex-row gap-2 justify-center">
+                      <button
+                        onClick={() => paymentSessionId && startCashfreePayment(paymentSessionId, "production", "_modal")}
+                        className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-semibold cursor-pointer transition flex items-center justify-center gap-1.5"
+                      >
+                        <ExternalLink size={13} /> Re-open Popup
+                      </button>
+                      <button
+                        onClick={() => paymentSessionId && startCashfreePayment(paymentSessionId, "production", "_self")}
+                        className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 rounded-lg text-xs font-semibold cursor-pointer transition flex items-center justify-center gap-1.5 text-zinc-200"
+                      >
+                        <ExternalLink size={13} /> Pay on Cashfree Full Page
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -511,12 +524,22 @@ export const FileUploader = ({ token }: FileUploaderProps) => {
                 )}
 
                 {paymentPhase === "error" && (
-                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400 flex items-start gap-2 text-left">
-                    <AlertCircle size={16} className="shrink-0 mt-0.5" />
-                    <div className="space-y-1">
-                      <p className="font-semibold">Payment Notice</p>
-                      <p className="text-[11px] text-zinc-400">{paymentError}</p>
+                  <div className="space-y-3">
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400 flex items-start gap-2 text-left">
+                      <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                      <div className="space-y-1">
+                        <p className="font-semibold">Payment Notice</p>
+                        <p className="text-[11px] text-zinc-400">{paymentError}</p>
+                      </div>
                     </div>
+                    {paymentSessionId && (
+                      <button
+                        onClick={() => startCashfreePayment(paymentSessionId, "production", "_self")}
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold cursor-pointer transition flex items-center justify-center gap-1.5"
+                      >
+                        <ExternalLink size={13} /> Try Full-Page Cashfree Checkout
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

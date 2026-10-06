@@ -57,11 +57,13 @@ export const createCashfreeOrder = async (
     customer_details: {
       customer_id: params.customerId || `cust_${Date.now()}`,
       customer_name: params.customerName || "Freelance Admin",
-      customer_email: params.customerEmail || "admin@freelance-approval.local",
-      customer_phone: params.customerPhone || "9999999999",
+      customer_email: params.customerEmail || "admin@freelance-approval.com",
+      customer_phone: params.customerPhone || "9876543210",
     },
     order_meta: {
-      return_url: params.returnUrl || null,
+      return_url:
+        params.returnUrl ||
+        `${process.env.CLIENT_URL || "https://freelance-approval.vercel.app"}/dashboard?order_id={order_id}`,
       payment_methods: null,
     },
     order_note: params.orderNote || "Deliverable file upload fee",
